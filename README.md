@@ -87,23 +87,35 @@ git clone https://github.com/morrieinmaas/eimer && cd eimer
 just smoke
 ```
 
-### A real run from a bastion
+### A real run against a store on a LAN
 
-Most self-hosted stores sit on a LAN. Install eimer on a host that can reach it, then pipe the
-keys in on stdin so they never land on a command line or a remote disk:
+Most self-hosted stores are only reachable from inside their network. Keep eimer on your
+laptop and open an ssh port forward through a host that can reach the store:
+
+```sh
+ssh -f -N -L 19000:10.0.0.11:9000 bastion
+eimer audit --endpoint http://127.0.0.1:19000 --env-file ~/.secrets/store.env --out evidence/store-$(date +%F).json
+```
+
+The keys stay in a local file, the report lands locally, and nothing is installed on any
+server. Note the endpoint in the report reads `127.0.0.1:19000`; name the estate in a config
+file if you want the real address on the evidence. A large estate takes a minute or two per
+hundred buckets; `-v` prints each bucket with its slowest call as it goes.
+
+If eimer has to run on the remote host instead, for example from a cron job there, install it
+with the same curl line on that host and pipe the env file in over stdin so the keys never
+touch the remote command line or disk:
 
 ```sh
 ssh -o ServerAliveInterval=30 bastion \
   'eimer audit --env-file /dev/stdin --endpoint http://10.0.0.11:9000 -v --out /tmp/estate.json' \
-  < .env
+  < ~/.secrets/store.env
 scp 'bastion:/tmp/estate.json*' ./evidence/
 ```
 
-`--env-file /dev/stdin` reads the keys from the piped dotenv file. A large estate takes a minute
-or two per hundred buckets; `-v` prints each bucket with its slowest call as it goes, and the
-report is saved before it is printed, so a dropped session loses only the screen output.
-`just smoke-remote HOST ENDPOINT` does the same from a checkout: copies the binary over, runs
-it, fetches the report into `evidence/`, and removes everything from the bastion again.
+The report is saved before it is printed, so a dropped session loses only the screen output.
+`just smoke-remote HOST ENDPOINT` scripts this from a checkout and removes the binary and
+report from the host afterwards.
 
 ## Commands
 
@@ -225,11 +237,10 @@ jq '.reports[0].minio | {layout, site_replication}' today.json
 jq -r '.reports[0].minio.erasure_sets[]? | "\(.pool)/\(.set) nodes=\(.nodes | length) offline=\(.offline_drives) healing=\(.healing_drives)"' today.json
 ```
 
-Straight from a bastion, without a file on either side:
+Through a tunnel, straight into jq:
 
 ```sh
-ssh -o ServerAliveInterval=30 bastion \
-  'eimer audit --env-file /dev/stdin --endpoint http://10.0.0.11:9000 --json' < .env \
+eimer audit --endpoint http://127.0.0.1:19000 --env-file ~/.secrets/store.env --json \
   | jq '.reports[0].findings | group_by(.id) | map({id: .[0].id, severity: .[0].severity, buckets: length})'
 ```
 
