@@ -1,0 +1,47 @@
+version: 2
+
+project_name: eimer
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/eimer
+    binary: eimer
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - eimer.example.toml
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: git
+  filters:
+    exclude:
+      - "^chore"
+      - "^docs"
+      - "^test"
+
+release:
+  draft: false
+  footer: |
+    Verify a download: `sha256sum -c checksums.txt --ignore-missing`.
+    The binary is static, reads only, and sends nothing anywhere but the endpoint you name.

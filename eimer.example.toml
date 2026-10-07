@@ -1,0 +1,67 @@
+# eimer configuration. Copy to ./eimer.toml or ~/.config/eimer/config.toml.
+# Every key is optional. Flags override environment variables, which override this file.
+
+# S3 endpoint to audit. Also: --endpoint, EIMER_ENDPOINT.
+endpoint = "https://s3.example.org:9000"
+
+# Signing region. MinIO and some others reject a mismatch. Also: EIMER_REGION, AWS_REGION.
+region = "us-east-1"
+
+# Credentials. Prefer the environment over this file:
+#   EIMER_ACCESS_KEY / EIMER_SECRET_KEY, AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY,
+#   MINIO_ACCESS_KEY / MINIO_SECRET_KEY, MINIO_ROOT_USER / MINIO_ROOT_PASSWORD.
+# Leave both empty to fall back to AWS_PROFILE and ~/.aws/credentials.
+access_key = ""
+secret_key = ""
+
+# Audit only these buckets. Empty means every bucket the credentials can list.
+# Also: --bucket (repeatable), EIMER_BUCKETS="a,b".
+buckets = []
+
+# Objects checked for per-object retention in each object-locked bucket. 0 disables.
+sample = 20
+
+# Objects listed per bucket for the inventory, key portability and anonymous-read checks.
+# Counts and sizes are lower bounds when a bucket has more (MinIO's admin API supplies exact
+# totals regardless). Listing is the slow call on large stores. 0 disables it.
+list_max = 200
+
+# Buckets inspected concurrently.
+parallel = 8
+
+# Skip TLS certificate verification.
+insecure = false
+
+# Emit JSON instead of the text report.
+json = false
+
+# Seconds allowed per S3 call, retries included. A stalling store shows up as an error
+# cell naming the call instead of a hung run.
+timeout = 30
+
+# Progress and per-bucket timing on stderr. Also: -v, EIMER_VERBOSE.
+verbose = false
+
+# KEY=VALUE file read before the environment, for keeping credentials in a gitignored
+# .env rather than exporting them one by one. Also: --env-file, EIMER_ENV_FILE.
+env_file = ""
+
+# Also write the JSON report to this file, with a .sha256 sidecar for the evidence folder.
+out = ""
+
+# Several endpoints in one run. When any [[estate]] is present the top-level endpoint is
+# ignored; unset fields inherit the top-level region, credentials and insecure flag.
+# Keep secrets out of the file: name environment variables instead.
+#
+# [[estate]]
+# name = "lab"
+# endpoint = "http://10.0.0.11:9000"
+# region = "eu-lab-1"
+# access_key_env = "LAB_ACCESS_KEY"
+# secret_key_env = "LAB_SECRET_KEY"
+#
+# [[estate]]
+# name = "rustfs-staging"
+# endpoint = "https://rustfs.staging.example"
+# insecure = true
+# buckets = ["etcd-snapshots"]
