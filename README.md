@@ -23,7 +23,8 @@ script first: `curl -fsSL .../install.sh > install.sh`, look, then `sh install.s
 
 The archives are also on the [releases page](https://github.com/morrieinmaas/eimer/releases)
 for a manual install, and Go users can build from source with
-`go install github.com/morrieinmaas/eimer/cmd/eimer@latest`.
+`go install github.com/morrieinmaas/eimer/cmd/eimer@latest`. Later, `eimer update` upgrades
+the binary in place.
 
 ## Quick start
 
@@ -39,8 +40,8 @@ This is the report from `just smoke`, which audits a throwaway RustFS with one W
 one public bucket. It exits 3 because a bucket is readable without credentials:
 
 ```
-eimer v0.3.0 audit of http://127.0.0.1:19000
-engine: RustFS (probable)   tls: no   region: us-east-1   buckets: 2   started: 2026-10-07T12:25:40Z   took: 0.0s
+eimer v0.4.0 audit of http://127.0.0.1:19000
+engine: RustFS (probable)   tls: no   region: us-east-1   buckets: 2   started: 2026-10-07T13:33:17Z   took: 0.0s
 
 BUCKET  VERSIONING  OBJECT LOCK     POLICY  ACL      ANONYMOUS  ENCRYPTION  SAMPLE
 plain   off         off             PUBLIC  private  READ       off         -
