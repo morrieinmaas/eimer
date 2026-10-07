@@ -10,9 +10,18 @@ endpoint you name.
 
 ## Quick start
 
-Download a binary for Linux, macOS or Windows from the
-[releases page](https://github.com/morrieinmaas/eimer/releases) and check it against
-`checksums.txt`, or build from source:
+Linux and macOS, amd64 and arm64:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/morrieinmaas/eimer/main/install.sh | sh
+```
+
+The script downloads the release archive for your machine, verifies it against the published
+`checksums.txt`, and installs `eimer` into `/usr/local/bin` if that is writable, else
+`~/.local/bin`. Set `EIMER_INSTALL_DIR` or `EIMER_VERSION` to choose. Prefer to read it first?
+`curl -fsSL .../install.sh > install.sh`, look, then `sh install.sh`. The archives are also on
+the [releases page](https://github.com/morrieinmaas/eimer/releases) for a manual install,
+and Go users can build from source:
 
 ```sh
 go install github.com/morrieinmaas/eimer/cmd/eimer@latest
