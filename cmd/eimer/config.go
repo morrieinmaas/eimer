@@ -15,6 +15,7 @@ import (
 // command-line flags, EIMER_* environment variables, the TOML file, defaults.
 type Config struct {
 	Endpoint  string   `toml:"endpoint"`
+	Via       string   `toml:"via"`
 	Region    string   `toml:"region"`
 	AccessKey string   `toml:"access_key"`
 	SecretKey string   `toml:"secret_key"`
@@ -37,6 +38,7 @@ type Config struct {
 type Estate struct {
 	Name         string   `toml:"name"`
 	Endpoint     string   `toml:"endpoint"`
+	Via          string   `toml:"via"`
 	Region       string   `toml:"region"`
 	AccessKey    string   `toml:"access_key"`
 	SecretKey    string   `toml:"secret_key"`
@@ -50,7 +52,7 @@ type Estate struct {
 // present, else the single top-level endpoint.
 func (c Config) targets(getenv func(string) string) []Estate {
 	if len(c.Estates) == 0 {
-		return []Estate{{Endpoint: c.Endpoint, Region: c.Region, AccessKey: c.AccessKey, SecretKey: c.SecretKey, Buckets: c.Buckets, Insecure: &c.Insecure}}
+		return []Estate{{Endpoint: c.Endpoint, Via: c.Via, Region: c.Region, AccessKey: c.AccessKey, SecretKey: c.SecretKey, Buckets: c.Buckets, Insecure: &c.Insecure}}
 	}
 	out := make([]Estate, 0, len(c.Estates))
 	for _, e := range c.Estates {
@@ -62,6 +64,9 @@ func (c Config) targets(getenv func(string) string) []Estate {
 		}
 		if e.Region == "" {
 			e.Region = c.Region
+		}
+		if e.Via == "" {
+			e.Via = c.Via
 		}
 		if e.AccessKey == "" && e.SecretKey == "" {
 			e.AccessKey, e.SecretKey = c.AccessKey, c.SecretKey
@@ -86,6 +91,7 @@ func defaults() Config {
 // The AWS and MinIO names are there so credentials already in a shell just work.
 var envNames = map[string][]string{
 	"endpoint":   {"EIMER_ENDPOINT", "MINIO_URL", "MINIO_ENDPOINT", "S3_ENDPOINT", "AWS_ENDPOINT_URL"},
+	"via":        {"EIMER_VIA"},
 	"region":     {"EIMER_REGION", "AWS_REGION", "AWS_DEFAULT_REGION", "MINIO_REGION"},
 	"access_key": {"EIMER_ACCESS_KEY", "AWS_ACCESS_KEY_ID", "MINIO_ACCESS_KEY", "MINIO_ACCESSKEY", "MINIO_ROOT_USER"},
 	"secret_key": {"EIMER_SECRET_KEY", "AWS_SECRET_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_SECRETKEY", "MINIO_ROOT_PASSWORD"},
@@ -192,6 +198,9 @@ func applyEnv(c *Config, getenv func(string) string) error {
 	}
 	if v, ok := lookup("endpoint"); ok {
 		c.Endpoint = v
+	}
+	if v, ok := lookup("via"); ok {
+		c.Via = v
 	}
 	if v, ok := lookup("region"); ok {
 		c.Region = v

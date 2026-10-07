@@ -258,6 +258,7 @@ type Report struct {
 	Version   string      `json:"version"`
 	Name      string      `json:"name,omitempty"` // estate label from the config file
 	Endpoint  string      `json:"endpoint"`
+	Via       string      `json:"via,omitempty"` // ssh hop(s) the audit was tunnelled through
 	Engine    string      `json:"engine"`
 	TLS       bool        `json:"tls"`
 	Hygiene   Hygiene     `json:"hygiene"`
@@ -300,6 +301,9 @@ func (r *Report) WriteText(w io.Writer) error {
 	label := r.Endpoint
 	if r.Name != "" {
 		label = r.Name + " (" + r.Endpoint + ")"
+	}
+	if r.Via != "" {
+		label += " via " + r.Via
 	}
 	fmt.Fprintf(w, "%s %s audit of %s\n", r.Tool, r.Version, label)
 	fmt.Fprintf(w, "engine: %s   tls: %s   region: %s   buckets: %d   started: %s   took: %.1fs\n\n",

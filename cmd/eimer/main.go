@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/morrieinmaas/eimer/internal/audit"
+	"github.com/morrieinmaas/eimer/internal/update"
 )
 
 // version is set at build time: -ldflags "-X main.version=v0.1.0".
@@ -23,7 +24,9 @@ const usage = `eimer: offline compliance audit for S3-compatible object stores
 
 usage:
   eimer audit --endpoint URL [flags]      audit one endpoint (or every [[estate]] in the config)
+  eimer audit --endpoint URL --via HOST   same, through an ssh port forward via HOST (or HOP1,HOP2,HOST)
   eimer diff OLD.json NEW.json            show what changed between two reports
+  eimer update [--check]                  replace this binary with the latest release (or just report it)
   eimer version
 
 The audit is read-only and nothing leaves your machine except S3 reads to the endpoint.
@@ -57,6 +60,8 @@ func main() {
 		os.Exit(runAudit(os.Args[2:]))
 	case "diff":
 		os.Exit(runDiff(os.Args[2:]))
+	case "update", "upgrade":
+		os.Exit(runUpdate(os.Args[2:]))
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
@@ -108,6 +113,8 @@ func runAudit(args []string) int {
 	fs.IntVar(&cfg.Timeout, "timeout", cfg.Timeout, "seconds allowed per S3 call, retries included")
 	fs.BoolVar(&cfg.Verbose, "v", cfg.Verbose, "progress and per-bucket timing on stderr")
 	fs.StringVar(&cfg.Endpoint, "endpoint", cfg.Endpoint, "S3 endpoint URL, e.g. https://s3.example.org:9000")
+	var via multiFlag
+	fs.Var(&via, "via", "ssh host that can reach the endpoint; eimer opens a port forward through it and runs locally. Repeat or comma-separate for a chain of hops")
 	fs.StringVar(&cfg.Region, "region", cfg.Region, "signing region; some engines reject a mismatch")
 	fs.StringVar(&cfg.AccessKey, "access-key", cfg.AccessKey, "access key (default: env, then the AWS profile chain)")
 	fs.StringVar(&cfg.SecretKey, "secret-key", cfg.SecretKey, "secret key")
@@ -127,6 +134,9 @@ func runAudit(args []string) int {
 	}
 	if len(buckets) > 0 {
 		cfg.Buckets = buckets
+	}
+	if len(via) > 0 {
+		cfg.Via = strings.Join(via, ",")
 	}
 
 	targets := cfg.targets(getenv)
@@ -150,6 +160,7 @@ func runAudit(args []string) int {
 		report, err := audit.Run(ctx, audit.Options{
 			Name:      t.Name,
 			Endpoint:  t.Endpoint,
+			Via:       t.Via,
 			Region:    t.Region,
 			AccessKey: t.AccessKey,
 			SecretKey: t.SecretKey,
@@ -199,6 +210,36 @@ func logWriter(verbose bool) io.Writer {
 		return os.Stderr
 	}
 	return io.Discard
+}
+
+func runUpdate(args []string) int {
+	fs := flag.NewFlagSet("update", flag.ContinueOnError)
+	check := fs.Bool("check", false, "only report whether a newer release exists")
+	fs.Usage = func() { fmt.Fprint(os.Stderr, "usage: eimer update [--check]\n") }
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	o := update.Options{Current: version}
+	rel, err := update.Check(ctx, o)
+	if err != nil {
+		return fail(err)
+	}
+	if !rel.Newer {
+		fmt.Printf("eimer %s is the latest release\n", rel.Current)
+		return 0
+	}
+	if *check {
+		fmt.Printf("eimer %s is available, you run %s; run: eimer update\n", rel.Latest, rel.Current)
+		return 0
+	}
+	got, err := update.Apply(ctx, o)
+	if err != nil {
+		return fail(err)
+	}
+	fmt.Printf("updated eimer %s -> %s (sha256 verified)\n", rel.Current, got)
+	return 0
 }
 
 func runDiff(args []string) int {

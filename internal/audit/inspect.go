@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -23,12 +24,14 @@ import (
 	"github.com/aws/smithy-go"
 
 	"github.com/morrieinmaas/eimer/internal/minio"
+	"github.com/morrieinmaas/eimer/internal/tunnel"
 )
 
 // Options configures one audit run.
 type Options struct {
 	Name      string // estate label, optional
 	Endpoint  string
+	Via       string // ssh host to forward through; the audit then runs locally against a tunnel
 	Region    string
 	AccessKey string // empty: fall back to the default AWS credential chain
 	SecretKey string
@@ -57,11 +60,38 @@ func Run(ctx context.Context, o Options) (*Report, error) {
 	if o.Log == nil {
 		o.Log = io.Discard
 	}
+	r := &Report{
+		Tool:      "eimer",
+		Version:   o.Version,
+		Name:      o.Name,
+		Endpoint:  o.Endpoint,
+		Via:       o.Via,
+		TLS:       strings.HasPrefix(strings.ToLower(o.Endpoint), "https://"),
+		StartedAt: time.Now(),
+	}
+
+	serverName := ""
+	var tun *tunnel.Tunnel
+	if o.Via != "" {
+		var err error
+		if tun, err = tunnel.Open(ctx, o.Via, o.Endpoint); err != nil {
+			return nil, err
+		}
+		defer tun.Close()
+		if u, err := url.Parse(o.Endpoint); err == nil {
+			serverName = u.Hostname() // the certificate names the real host, not 127.0.0.1
+		}
+		if o.Endpoint, err = tun.Rewrite(o.Endpoint); err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(o.Log, "%s: tunnel via %s, %s -> %s\n", r.Endpoint, o.Via, tun.Local, tun.Remote)
+	}
+
 	if o.HTTP == nil {
 		o.HTTP = &http.Client{Timeout: o.Timeout}
-		if o.Insecure {
+		if o.Insecure || serverName != "" {
 			t := http.DefaultTransport.(*http.Transport).Clone()
-			t.TLSClientConfig.InsecureSkipVerify = true
+			t.TLSClientConfig = &tls.Config{InsecureSkipVerify: o.Insecure, ServerName: serverName, MinVersion: tls.VersionTLS12} //nolint:gosec // --insecure is the operator's explicit choice
 			o.HTTP.Transport = t
 		}
 	}
@@ -70,18 +100,9 @@ func Run(ctx context.Context, o Options) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	r := &Report{
-		Tool:      "eimer",
-		Version:   o.Version,
-		Name:      o.Name,
-		Endpoint:  o.Endpoint,
-		TLS:       strings.HasPrefix(strings.ToLower(o.Endpoint), "https://"),
-		StartedAt: time.Now(),
-	}
 	r.Engine, r.Hygiene = fingerprint(ctx, o.HTTP, o.Endpoint)
 
-	fmt.Fprintf(o.Log, "%s: engine %s\n", o.Endpoint, r.Engine)
+	fmt.Fprintf(o.Log, "%s: engine %s\n", r.Endpoint, r.Engine)
 	names := o.Buckets
 	if len(names) == 0 {
 		names, err = listBuckets(ctx, client)
@@ -93,11 +114,14 @@ func Run(ctx context.Context, o Options) (*Report, error) {
 			}
 		}
 		if err != nil {
+			if msg := tun.Stderr(); msg != "" {
+				return nil, fmt.Errorf("list buckets: %w (ssh via %s said: %s)", err, o.Via, msg)
+			}
 			return nil, fmt.Errorf("list buckets: %w", err)
 		}
 	}
 	r.Region = o.Region
-	fmt.Fprintf(o.Log, "%s: %d bucket(s), %d in parallel, %s per call\n", o.Endpoint, len(names), o.Parallel, o.Timeout)
+	fmt.Fprintf(o.Log, "%s: %d bucket(s), %d in parallel, %s per call\n", r.Endpoint, len(names), o.Parallel, o.Timeout)
 
 	anon, _, err := newClient(ctx, o, true)
 	if err != nil {
@@ -125,7 +149,7 @@ func Run(ctx context.Context, o Options) (*Report, error) {
 		r.MinIO = minio.Collect(ctx, minio.Options{Endpoint: o.Endpoint, Region: o.Region,
 			AccessKey: creds.AccessKeyID, SecretKey: creds.SecretAccessKey, HTTP: o.HTTP})
 		applyUsage(r.Buckets, r.MinIO.Usage)
-		fmt.Fprintf(o.Log, "%s: minio admin %.1fs available=%v\n", o.Endpoint, time.Since(started).Seconds(), r.MinIO.Available)
+		fmt.Fprintf(o.Log, "%s: minio admin %.1fs available=%v\n", r.Endpoint, time.Since(started).Seconds(), r.MinIO.Available)
 	}
 
 	r.Migration = Migration(r.Buckets)

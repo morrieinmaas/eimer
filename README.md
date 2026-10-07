@@ -89,41 +89,35 @@ just smoke
 
 ### A real run against a store on a LAN
 
-Most self-hosted stores are only reachable from inside their network. Keep eimer on your
-laptop and open an ssh port forward through a host that can reach the store:
+Most self-hosted stores are only reachable from inside their network. Tell eimer which ssh
+host can reach the store and it opens a port forward through it, audits through the tunnel,
+and closes it again. Keys and the report stay on your machine; nothing is installed anywhere
+else:
 
 ```sh
-ssh -f -N -L 19000:10.0.0.11:9000 bastion
-eimer audit --endpoint http://127.0.0.1:19000 --env-file ~/.secrets/store.env --out evidence/store-$(date +%F).json
+eimer audit --via bastion --endpoint http://10.0.0.11:9000 \
+  --env-file ~/.secrets/store.env --out evidence/store-$(date +%F).json
 ```
 
-The keys stay in a local file, the report lands locally, and nothing is installed on any
-server. Note the endpoint in the report reads `127.0.0.1:19000`; name the estate in a config
-file if you want the real address on the evidence. A large estate takes a minute or two per
-hundred buckets; `-v` prints each bucket with its slowest call as it goes.
+`--via` runs your own `ssh`, so aliases, keys, agents and jump settings from `~/.ssh/config`
+apply unchanged. Several hops are a comma-separated chain, `--via edge,core,bastion`, which
+becomes `ssh -J edge,core bastion`. The report names the real endpoint and the hop. A large
+estate takes a minute or two per hundred buckets; `-v` prints each bucket with its slowest
+call as it goes.
 
-If eimer has to run on the remote host instead, for example from a cron job there, install it
-with the same curl line on that host and pipe the env file in over stdin so the keys never
-touch the remote command line or disk:
-
-```sh
-ssh -o ServerAliveInterval=30 bastion \
-  'eimer audit --env-file /dev/stdin --endpoint http://10.0.0.11:9000 -v --out /tmp/estate.json' \
-  < ~/.secrets/store.env
-scp 'bastion:/tmp/estate.json*' ./evidence/
-```
-
-The report is saved before it is printed, so a dropped session loses only the screen output.
-`just smoke-remote HOST ENDPOINT` scripts this from a checkout and removes the binary and
-report from the host afterwards.
+If eimer has to run on the remote host instead, for a cron job there, install it with the
+same curl line on that host; `--env-file /dev/stdin` then reads keys piped over ssh so they
+never touch the remote command line or disk, and `just smoke-remote HOST ENDPOINT` scripts
+that round trip from a checkout.
 
 ## Commands
 
 ```
-eimer audit --endpoint URL [--bucket NAME]... [--region R] [--env-file FILE] [--config FILE]
-            [--sample N] [--list-max N] [--parallel N] [--timeout SECONDS] [-v]
-            [--json] [--out FILE] [--insecure]
+eimer audit --endpoint URL [--via HOST[,HOST...]] [--bucket NAME]... [--region R]
+            [--env-file FILE] [--config FILE] [--sample N] [--list-max N] [--parallel N]
+            [--timeout SECONDS] [-v] [--json] [--out FILE] [--insecure]
 eimer diff OLD.json NEW.json
+eimer update [--check]
 eimer version
 ```
 
@@ -140,6 +134,7 @@ flags, then environment, then file, then defaults. The file is `--config PATH`, 
 | setting | flag | environment | default |
 |---|---|---|---|
 | endpoint | `--endpoint` | `EIMER_ENDPOINT`, `MINIO_URL`, `S3_ENDPOINT`, `AWS_ENDPOINT_URL` | required |
+| via | `--via` (repeatable) | `EIMER_VIA` | none |
 | region | `--region` | `EIMER_REGION`, `AWS_REGION`, `AWS_DEFAULT_REGION`, `MINIO_REGION` | `us-east-1`, then whatever the server asks for |
 | access key | `--access-key` | `EIMER_ACCESS_KEY`, `AWS_ACCESS_KEY_ID`, `MINIO_ACCESS_KEY`, `MINIO_ACCESSKEY`, `MINIO_ROOT_USER` | AWS profile chain |
 | secret key | `--secret-key` | `EIMER_SECRET_KEY`, `AWS_SECRET_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_SECRETKEY`, `MINIO_ROOT_PASSWORD` | AWS profile chain |
@@ -237,14 +232,24 @@ jq '.reports[0].minio | {layout, site_replication}' today.json
 jq -r '.reports[0].minio.erasure_sets[]? | "\(.pool)/\(.set) nodes=\(.nodes | length) offline=\(.offline_drives) healing=\(.healing_drives)"' today.json
 ```
 
-Through a tunnel, straight into jq:
+Through a bastion, straight into jq:
 
 ```sh
-eimer audit --endpoint http://127.0.0.1:19000 --env-file ~/.secrets/store.env --json \
+eimer audit --via bastion --endpoint http://10.0.0.11:9000 --env-file ~/.secrets/store.env --json \
   | jq '.reports[0].findings | group_by(.id) | map({id: .[0].id, severity: .[0].severity, buckets: length})'
 ```
 
 Progress from `-v` goes to stderr, so it never disturbs the pipe.
+
+## Updating
+
+```sh
+eimer update          # replace this binary with the latest release, checksum verified
+eimer update --check  # only say whether a newer release exists
+```
+
+eimer never checks for new versions on its own. Both commands are the only time it talks to
+anything other than the endpoint you audit, and both contact GitHub only when you run them.
 
 ## Evidence and drift
 
@@ -262,7 +267,8 @@ changed, which is the signal a scheduled job wants.
 
 - **Write.** There is no code path that creates, changes or deletes anything on the store.
   The only non-GET request is the anonymous one-byte object read used to prove exposure.
-- **Phone home.** No telemetry, no update check, no DNS lookups beyond the endpoint you name.
+- **Phone home.** No telemetry and no automatic update check. `eimer update` contacts GitHub
+  only when you run it.
 - **Admin APIs for engines other than MinIO.** RustFS, Garage, SeaweedFS and Ceph are audited
   over the S3 API only. Their health and IAM need their own adapters, which is the next step.
 - **Claim more than it has seen.** The MinIO adapter has been exercised against one production

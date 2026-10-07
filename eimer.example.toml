@@ -4,6 +4,12 @@
 # S3 endpoint to audit. Also: --endpoint, EIMER_ENDPOINT.
 endpoint = "https://s3.example.org:9000"
 
+# ssh host that can reach the endpoint when your machine cannot. eimer opens a port forward
+# through it (your ~/.ssh/config applies), audits through the tunnel, and closes it.
+# Keys and the report stay on your machine. A comma-separated chain means several hops.
+# Also: --via (repeatable), EIMER_VIA.
+via = ""
+
 # Signing region. MinIO and some others reject a mismatch. Also: EIMER_REGION, AWS_REGION.
 region = "us-east-1"
 
