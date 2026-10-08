@@ -179,7 +179,9 @@ says so and carries on. Build date, server and drive state, erasure sets with th
 span and a derived verdict on whether a node outage is survivable, raw capacity, audit and KMS
 targets, site replication, exact usage, users, groups, policies and service accounts. The
 encrypted admin responses are decoded with a clean-room implementation of MinIO's format; no
-MinIO code is linked.
+MinIO code is linked. Redundancy is a property of the deployment, not of a bucket: parity,
+erasure sets and node-loss tolerance sit under `minio.layout` in the JSON. A bucket's own
+`replication` block is something else, a copy to another site that must be configured per bucket.
 
 **Migration carry-over.** Every feature in use is listed against RustFS, Garage, SeaweedFS and
 Ceph RGW as `native`, `partial` or `none`. The table is one Go literal in

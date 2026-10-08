@@ -243,6 +243,20 @@ type Bucket struct {
 	SlowestSeconds float64         `json:"slowest_seconds,omitempty"`
 }
 
+// MarshalJSON leaves the probe sections out of a bucket nothing was probed on, so a
+// "supported": false never stands in for "not asked".
+func (b Bucket) MarshalJSON() ([]byte, error) {
+	type full Bucket
+	if b.Skipped == "" {
+		return json.Marshal(full(b))
+	}
+	return json.Marshal(struct {
+		Name    string     `json:"name"`
+		Created *time.Time `json:"created,omitempty"`
+		Skipped string     `json:"skipped"`
+	}{b.Name, b.Created, b.Skipped})
+}
+
 // Hygiene holds endpoint-level transport facts from the fingerprint request.
 type Hygiene struct {
 	ServerHeader     string     `json:"server_header,omitempty"`
@@ -254,8 +268,8 @@ type Hygiene struct {
 
 // Report is the full audit output for one endpoint.
 type Report struct {
-	Tool      string      `json:"tool"`
-	Version   string      `json:"version"`
+	Tool      string      `json:"-"` // the estate document carries tool and version once
+	Version   string      `json:"-"`
 	Name      string      `json:"name,omitempty"` // estate label from the config file
 	Endpoint  string      `json:"endpoint"`
 	Via       string      `json:"via,omitempty"` // ssh hop(s) the audit was tunnelled through

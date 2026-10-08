@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -407,6 +408,10 @@ func TestInvalidBucketNamesAreSkippedWithoutRequests(t *testing.T) {
 	if r.Buckets[0].Skipped == "" || r.Buckets[0].Versioning.Supported {
 		t.Fatalf("expected skip without probes: %+v", r.Buckets[0])
 	}
+	js, err := json.Marshal(r.Buckets[0])
+	if err != nil || strings.Contains(string(js), "versioning") || !strings.Contains(string(js), `"skipped"`) {
+		t.Fatalf("skipped bucket must carry no probe sections: %s %v", js, err)
+	}
 	if _, hit := ids(r.Findings)["BUCKET_NAME_INVALID"]; !hit {
 		t.Fatalf("findings: %+v", r.Findings)
 	}
@@ -414,7 +419,7 @@ func TestInvalidBucketNamesAreSkippedWithoutRequests(t *testing.T) {
 	if err := r.WriteText(&text); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(text.String(), "Models  skipped: invalid name") {
+	if !strings.Contains(text.String(), "Models  skipped: not a valid S3 bucket name") {
 		t.Fatalf("text:\n%s", text.String())
 	}
 }

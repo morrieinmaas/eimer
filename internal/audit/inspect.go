@@ -281,7 +281,7 @@ func listBuckets(ctx context.Context, c *s3.Client) ([]string, error) {
 func inspectBucket(parent context.Context, c, anon *s3.Client, name string, o Options) (b Bucket) {
 	b = Bucket{Name: name}
 	if !validBucketName(name) {
-		b.Skipped = "invalid name"
+		b.Skipped = "not a valid S3 bucket name, the API refuses to address it"
 		return b
 	}
 	n := aws.String(name)
